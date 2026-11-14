@@ -1,0 +1,14 @@
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# Daily system health report at 06:00.
+0 6 * * * root /opt/smartcity/scripts/health_report.sh --output /srv/smartcity/reports/health-latest.txt >> /srv/smartcity/reports/cron.log 2>&1
+
+# Archive source logs older than seven days, retaining originals.
+0 1 * * * root /opt/smartcity/scripts/archive_logs.sh --execute >> /srv/smartcity/reports/cron.log 2>&1
+
+# Remove archived bundles older than thirty days.
+20 1 * * * root /opt/smartcity/scripts/cleanup_archives.sh --execute >> /srv/smartcity/reports/cron.log 2>&1
+
+# Daily project data backup at 02:00.
+0 2 * * * root /opt/smartcity/scripts/backup_project.sh >> /srv/smartcity/reports/cron.log 2>&1
