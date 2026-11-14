@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+umask 077
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=lib/common.sh
@@ -56,11 +57,13 @@ fi
 stamp=$(date '+%Y%m%dT%H%M%S')
 archive="$ARCHIVE_DIR/smartcity-logs-$stamp.tar.gz"
 [[ ! -e $archive ]] || archive="$ARCHIVE_DIR/smartcity-logs-$stamp-$$.tar.gz"
+[[ ! -e $archive ]] || die "Archive destination already exists: $archive"
 archive_tmp=$(mktemp "$ARCHIVE_DIR/.smartcity-archive.XXXXXX")
 if ! (cd -- "$SOURCE_DIR" && tar --create --gzip --file="$archive_tmp" --null --files-from="$manifest"); then
     die "tar could not create the archive. Source files were not removed."
 fi
 gzip -t -- "$archive_tmp" || die "Archive integrity check failed. Source files were not removed."
-mv -- "$archive_tmp" "$archive"
+mv --no-clobber -- "$archive_tmp" "$archive"
+[[ ! -e $archive_tmp ]] || die "Archive destination appeared during publication: $archive"
 archive_tmp=""
 log "Created and validated $archive; original logs were retained."

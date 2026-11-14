@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Local-only Smart City dashboard API for Kali WSL and Linux rehearsal."""
+"""Local-only Smart City dashboard API for Kali WSL and Ubuntu live monitoring."""
 
 from __future__ import annotations
 
@@ -23,18 +23,16 @@ from urllib.parse import parse_qs, urlparse
 ROOT = Path(__file__).resolve().parent
 DB_PATH = Path(os.environ.get("SMARTCITY_DB", Path.home() / ".local" / "state" / "smartcity-dashboard" / "smartcity.sqlite3"))
 HOST = "127.0.0.1"
-PORT = int(os.environ.get("SMARTCITY_PORT", "8765"))
+try:
+    PORT = int(os.environ.get("SMARTCITY_PORT", "8765"))
+except ValueError as error:
+    raise SystemExit("SMARTCITY_PORT must be an integer from 1 to 65535.") from error
+if not 1 <= PORT <= 65535:
+    raise SystemExit("SMARTCITY_PORT must be an integer from 1 to 65535.")
 MODE = os.environ.get("SMARTCITY_MODE", "demo").lower()
 DEPARTMENTS = ["Traffic", "Public Safety", "Water", "Utilities"]
-SAMPLE_EVENTS = [
-    ("Traffic", "Warning", "Adaptive signal timing exceeded threshold", "Junction 04 · Central Avenue"),
-    ("Water", "Info", "Pressure telemetry nominal", "Reservoir North · 3.4 bar"),
-    ("Public Safety", "Critical", "Priority response unit dispatched", "Sector B · Incident SC-2041"),
-    ("Utilities", "Info", "Substation load within operating range", "Grid East · 68% capacity"),
-    ("Traffic", "Info", "Sensor heartbeat received", "Junction 12 · North Loop"),
-]
-
-
+MAX_INCIDENTS = 10_000
+MAX_EXPORT_ROWS = 5_000
 def connect_db() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     db = sqlite3.connect(DB_PATH, timeout=5)
@@ -56,7 +54,7 @@ def database():
         db.close()
 
 
-def initialize_db(seed_examples: bool = True) -> None:
+def initialize_db() -> None:
     with database() as db:
         db.execute("PRAGMA journal_mode=WAL")
         db.execute("""CREATE TABLE IF NOT EXISTS incidents (
@@ -70,15 +68,6 @@ def initialize_db(seed_examples: bool = True) -> None:
             updated_at TEXT NOT NULL
         )""")
         db.execute("CREATE INDEX IF NOT EXISTS incidents_created_idx ON incidents(created_at DESC)")
-        if seed_examples and db.execute("SELECT COUNT(*) FROM incidents").fetchone()[0] == 0:
-            stamp = datetime.now().astimezone().isoformat(timespec="seconds")
-            db.executemany(
-                "INSERT INTO incidents(department,level,title,detail,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?)",
-                [(d, lvl, title, detail, "Open" if lvl != "Info" else "Resolved", stamp, stamp)
-                 for d, lvl, title, detail in SAMPLE_EVENTS],
-            )
-
-
 def row_to_event(row: sqlite3.Row) -> dict:
     value = dict(row)
     created = datetime.fromisoformat(value["created_at"])
@@ -128,8 +117,6 @@ def read_host() -> dict:
         cpu_pct = round(100 * ((total_b - total_a) - (idle_b - idle_a)) / (total_b - total_a), 1) if total_b > total_a else None
     except (OSError, ValueError, IndexError, ZeroDivisionError):
         pass
-    penalties = (max(0, (mem_pct or 0) - 65) * 0.5) + (max(0, (disk_pct or 0) - 70) * 0.4)
-    score = round(max(0, 100 - penalties), 1) if total else None
     return {
         "hostname": socket.gethostname(), "os": release.get("PRETTY_NAME", platform.system()),
         "environment": "Kali on WSL" if in_wsl and "kali" in release.get("ID", "").lower() else ("WSL Linux" if in_wsl else ("Ubuntu Server" if release.get("ID") == "ubuntu" else "Local Linux")),
@@ -137,7 +124,7 @@ def read_host() -> dict:
         "memory_total_gb": round(total / 1024**3, 1) if total else None,
         "disk_used_percent": disk_pct, "disk_used_gb": round(disk.used / 1024**3, 1),
         "disk_total_gb": round(disk.total / 1024**3, 1), "uptime_hours": round(uptime_seconds / 3600, 1),
-        "cpu_used_percent": cpu_pct, "load": loads, "health_score": score, "sampled_at": datetime.now(timezone.utc).isoformat(),
+        "cpu_used_percent": cpu_pct, "load": loads, "sampled_at": datetime.now(timezone.utc).isoformat(),
     }
 
 
@@ -238,7 +225,21 @@ class Handler(BaseHTTPRequestHandler):
 
     def authorize_local_request(self) -> bool:
         origin = self.headers.get("Origin")
-        return origin is None or origin in (f"http://localhost:{PORT}", f"http://127.0.0.1:{PORT}")
+        if origin is None:
+            return True
+        try:
+            parsed = urlparse(origin)
+        except ValueError:
+            return False
+        request_host = self.headers.get("Host", "").lower()
+        return (
+            parsed.scheme == "http"
+            and parsed.hostname in ("localhost", "127.0.0.1", "::1")
+            and parsed.netloc.lower() == request_host
+            and parsed.path in ("", "/")
+            and not parsed.params and not parsed.query and not parsed.fragment
+            and parsed.username is None and parsed.password is None
+        )
 
     def do_GET(self) -> None:
         path = urlparse(self.path).path
@@ -252,12 +253,12 @@ class Handler(BaseHTTPRequestHandler):
                 all_events = [row_to_event(r) for r in db.execute("SELECT * FROM incidents ORDER BY id DESC LIMIT 7")]
             runtime = read_ubuntu_runtime() if MODE == "ubuntu" else None
             depts = [{"name": name, "open_incidents": next((r["count"] for r in groups if r["department"] == name), 0),
-                      "facility": f"local{i}", "status": "Log available" if runtime and name in runtime["readable_logs"] else ("Not readable" if runtime else "Demo")}
+                      "facility": f"local{i}", "status": "Log readable" if runtime and name in runtime["readable_logs"] else ("Log unavailable" if runtime else "No live source")}
                      for i, name in enumerate(DEPARTMENTS)]
             self.send_json({"host": read_host(), "runtime": runtime,
                             "departments": depts, "events": all_events,
                             "summary": {"total_events": total, "open_incidents": open_count, "active_incidents": active_count},
-                            "mode": "ubuntu-live" if MODE == "ubuntu" else "local-demo"})
+                            "mode": "ubuntu-live" if MODE == "ubuntu" else "local-host"})
             return
         if path == "/api/events":
             try:
@@ -267,11 +268,14 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"error": "page and limit must be integers."}, 400)
                 return
             total = event_count(params)
+            pages = max(1, (total + page_size - 1) // page_size)
+            page = min(page, pages)
             self.send_json({"events": event_query(params, limit=page_size, offset=(page - 1) * page_size),
-                            "total": total, "page": page, "pages": max(1, (total + page_size - 1) // page_size)})
+                            "total": total, "page": page, "pages": pages})
             return
         if path == "/api/export.csv":
-            rows = event_query(params, limit=None)
+            total = event_count(params)
+            rows = event_query(params, limit=MAX_EXPORT_ROWS)
             stream = io.StringIO(newline="")
             writer = csv.DictWriter(stream, fieldnames=["id", "created_at", "department", "level", "title", "detail", "status", "source"])
             writer.writeheader()
@@ -281,6 +285,9 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "text/csv; charset=utf-8")
             self.send_header("Content-Disposition", 'attachment; filename="smartcity-events.csv"')
             self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            if total > MAX_EXPORT_ROWS:
+                self.send_header("X-Export-Truncated", "true")
             self.end_headers()
             self.wfile.write(body)
             return
@@ -294,6 +301,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", f"{content_type}; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
             self.end_headers()
             self.wfile.write(body)
@@ -321,6 +329,11 @@ class Handler(BaseHTTPRequestHandler):
             return
         now = datetime.now().astimezone().isoformat(timespec="seconds")
         with database() as db:
+            db.execute("BEGIN IMMEDIATE")
+            count = db.execute("SELECT COUNT(*) FROM incidents").fetchone()[0]
+            if count >= MAX_INCIDENTS:
+                self.send_json({"error": f"Incident storage is full ({MAX_INCIDENTS} records). Export or remove old records before adding more."}, 409)
+                return
             cursor = db.execute("INSERT INTO incidents(department,level,title,detail,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?)",
                                 (department, level, title, detail, "Open", now, now))
             row = db.execute("SELECT * FROM incidents WHERE id=?", (cursor.lastrowid,)).fetchone()
@@ -358,7 +371,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def csv_safe(value):
-    if isinstance(value, str) and value.startswith(("=", "+", "-", "@", "\t", "\r")):
+    if isinstance(value, str) and value.lstrip(" \t\r\n").startswith(("=", "+", "-", "@")):
         return "'" + value
     return value
 
@@ -373,7 +386,7 @@ if __name__ == "__main__":
         if not Path("/opt/smartcity/config/rsyslog/30-smartcity.conf").is_file():
             raise SystemExit("Ubuntu project files are missing from /opt/smartcity. Install the project bundle first.")
     os.umask(0o077)
-    initialize_db(seed_examples=MODE == "demo")
+    initialize_db()
     if DB_PATH.is_file():
         DB_PATH.chmod(0o600)
     print(f"Smart City {MODE} dashboard: http://localhost:{PORT}")

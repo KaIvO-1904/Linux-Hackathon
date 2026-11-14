@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+umask 077
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=lib/common.sh
@@ -8,8 +9,17 @@ source "$SCRIPT_DIR/lib/common.sh"
 require_root
 require_cmd tar
 require_cmd gzip
+require_cmd flock
 readonly BACKUP_DIR=/srv/smartcity/backups
 install -d -m 0700 "$BACKUP_DIR"
+
+# Serialize manual and Cron runs. flock is released by the kernel if the
+# process exits or is killed, so a stale lock file cannot block future runs.
+exec {backup_lock_fd}>"$BACKUP_DIR/.backup.lock"
+if ! flock -n "$backup_lock_fd"; then
+    log "Another backup is already running; skipping this invocation."
+    exit 0
+fi
 
 items=()
 for item in \
@@ -29,6 +39,7 @@ done
 stamp=$(date '+%Y%m%dT%H%M%S')
 archive="$BACKUP_DIR/smartcity-backup-$stamp.tar.gz"
 [[ ! -e $archive ]] || archive="$BACKUP_DIR/smartcity-backup-$stamp-$$.tar.gz"
+[[ ! -e $archive ]] || die "Backup destination already exists: $archive"
 archive_tmp=$(mktemp "$BACKUP_DIR/.smartcity-backup.XXXXXX")
 staging_root=""
 cleanup() {
@@ -51,7 +62,8 @@ if [[ -n $staging_root ]]; then
 fi
 tar "${tar_args[@]}"
 gzip -t -- "$archive_tmp" || die "Backup integrity check failed."
-mv -- "$archive_tmp" "$archive"
+chmod 0600 "$archive_tmp"
+mv --no-clobber -- "$archive_tmp" "$archive"
+[[ ! -e $archive_tmp ]] || die "Backup destination appeared during publication: $archive"
 archive_tmp=""
-chmod 0600 "$archive"
 log "Created and validated $archive"

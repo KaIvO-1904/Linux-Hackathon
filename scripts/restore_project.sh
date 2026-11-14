@@ -22,6 +22,7 @@ done
 [[ -n $archive && -n $target ]] || { usage >&2; exit 2; }
 [[ -f $archive ]] || die "Backup archive not found: $archive"
 [[ $target == /* && $target != / ]] || die "Restore target must be an absolute path other than /."
+[[ ! -L $target ]] || die "Restore target must not be a symbolic link: $target"
 require_cmd tar
 require_root
 

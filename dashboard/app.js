@@ -4,13 +4,82 @@ let searchTimer;
 let toastTimer;
 let currentPage = 1;
 let totalPages = 1;
+let currentView = 'overview';
+let hasLiveRuntime = false;
+let noticeDismissed = false;
+
+const PAGE_CONFIG = {
+  overview: {hash:'#overview', label:'Overview', title:'Operations, in <span class="heading-period">focus.</span>', subtitle:'Live host signals and the incidents you record.'},
+  departments: {hash:'#departments', label:'Departments', title:'Department <span class="heading-period">sources.</span>', subtitle:'Facility mapping, source availability, and active incident counts.'},
+  events: {hash:'#activity', label:'Incidents', title:'Incident <span class="heading-period">register.</span>', subtitle:'Record, search, update, and export operator-entered incidents.'},
+  infrastructure: {hash:'#infrastructure', label:'Infrastructure', title:'Host <span class="heading-period">health.</span>', subtitle:'Current host resources and read-only Ubuntu VM status.'},
+  automation: {hash:'#automation', label:'Automation', title:'Scheduled <span class="heading-period">work.</span>', subtitle:'Project Cron jobs and archive retention configuration.'}
+};
+
+function viewFromHash(hash) {
+  return Object.keys(PAGE_CONFIG).find(page => PAGE_CONFIG[page].hash === hash) || 'overview';
+}
+function showPage(page, {updateHistory = true} = {}) {
+  if (!PAGE_CONFIG[page]) page = 'overview';
+  currentView = page;
+  document.body.dataset.page = page;
+  const config = PAGE_CONFIG[page];
+  $('page-title').innerHTML = config.title;
+  $('page-subtitle').textContent = config.subtitle;
+  $('breadcrumb-title').textContent = config.label;
+
+  $('notice').hidden = page !== 'overview' || noticeDismissed;
+  $('metric-grid').hidden = page !== 'overview';
+  $('content-grid').hidden = !['overview','departments','infrastructure'].includes(page);
+  document.querySelector('.departments-panel').hidden = !['overview','departments'].includes(page);
+  document.querySelector('.health-panel').hidden = !['overview','infrastructure'].includes(page);
+  $('content-grid').classList.toggle('single-panel', ['departments','infrastructure'].includes(page));
+  $('activity').hidden = page !== 'events';
+  $('live-systems').hidden = page !== 'infrastructure' || !hasLiveRuntime;
+  document.querySelector('.bottom-grid').hidden = !['infrastructure','automation'].includes(page);
+  $('automation-panel').hidden = page !== 'automation';
+  $('storage-panel').hidden = page !== 'infrastructure';
+
+  document.querySelectorAll('.nav-item[data-page]').forEach(link => {
+    const active = link.dataset.page === page;
+    link.classList.toggle('active', active);
+    if (active) link.setAttribute('aria-current','page');
+    else link.removeAttribute('aria-current');
+  });
+  if (updateHistory && location.hash !== config.hash) history.pushState({page}, '', config.hash);
+}
+
+function applyTheme(theme) {
+  const selected = theme === 'dark' ? 'dark' : 'light';
+  document.documentElement.dataset.theme = selected;
+  const label = selected === 'dark' ? 'Light mode' : 'Dark mode';
+  $('theme-label').textContent = label;
+  document.querySelector('.theme-icon').textContent = selected === 'dark' ? '☀' : '◐';
+  $('theme-toggle').setAttribute('aria-label', `Switch to ${selected === 'dark' ? 'light' : 'dark'} mode`);
+  $('theme-toggle').title = label;
+  const themeColor = document.querySelector('meta[name="theme-color"]');
+  if (themeColor) themeColor.content = selected === 'dark' ? '#000000' : '#fffafd';
+  try { localStorage.setItem('smartcity-theme', selected); } catch (_) { /* Theme still works for this page view. */ }
+}
 
 function safeText(value) {
   const node = document.createElement('span'); node.textContent = value ?? ''; return node.innerHTML;
 }
 function showToast(message) {
   const toast = $('toast'); toast.textContent = message; toast.classList.add('visible');
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.classList.remove('visible'), 2800);
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.classList.remove('visible'), 6000);
+}
+async function readApiResponse(response) {
+  let data = null;
+  try { data = await response.json(); } catch (_) { /* Report the HTTP status for non-JSON server errors. */ }
+  if (!response.ok) {
+    let message = data?.error || `Request failed (${response.status} ${response.statusText}).`;
+    if (response.status === 403) message += ' Restart the dashboard and reload the page to use the updated local request check.';
+    if (response.status === 501) message += ' Restart the dashboard to load the status-update handler.';
+    throw new Error(message);
+  }
+  if (!data) throw new Error('The dashboard returned an unreadable response. Restart it and reload the page.');
+  return data;
 }
 function formatUptime(hours) {
   if (hours == null) return '—';
@@ -37,8 +106,7 @@ async function loadEvents() {
   $('last-updated').textContent = 'updating…';
   try {
     const response = await fetch(`/api/events?${params}`, {cache:'no-store'});
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'Could not load incidents');
+    const data = await readApiResponse(response);
     totalPages = data.pages;
     $('event-rows').innerHTML = data.events.length ? data.events.map(eventMarkup).join('') : '<tr class="empty-row"><td colspan="6">No records match these filters. Record an incident to get started.</td></tr>';
     $('event-summary').textContent = `Showing ${data.events.length ? (currentPage-1)*12+1 : 0}–${(currentPage-1)*12+data.events.length} of ${data.total} records`;
@@ -51,33 +119,41 @@ async function loadEvents() {
 async function refreshDashboard() {
   try {
     const response = await fetch('/api/dashboard', {cache:'no-store'});
-    if (!response.ok) throw new Error('Dashboard data unavailable');
-    const data = await response.json(), host = data.host, summary = data.summary;
+    const data = await readApiResponse(response), host = data.host, summary = data.summary;
     $('env-name').textContent = host.environment;
-    $('workspace-mode').textContent = data.mode === 'ubuntu-live' ? 'Ubuntu live host' : 'Local rehearsal';
-    $('mode-badge').lastChild.textContent = data.mode === 'ubuntu-live' ? ' UBUNTU LIVE' : ' SIMULATION';
-    $('department-metric-label').textContent = data.mode === 'ubuntu-live' ? 'DEPARTMENT LOG SOURCES' : 'DEPARTMENTS IN DEMO';
-    $('department-metric-sub').textContent = data.mode === 'ubuntu-live' ? 'local syslog facilities' : 'simulated sources';
-    $('department-metric-foot').textContent = data.mode === 'ubuntu-live' ? 'read-only file status' : 'local0 through local3';
-    const connectedDepartments = data.mode === 'ubuntu-live' ? data.departments.filter(item => item.status === 'Log available').length : 4;
+    const liveUbuntu = data.mode === 'ubuntu-live';
+    $('workspace-mode').textContent = liveUbuntu ? 'Ubuntu live host' : `${host.environment} host`;
+    $('mode-badge').lastChild.textContent = liveUbuntu ? ' UBUNTU LIVE' : ' LOCAL HOST';
+    $('department-metric-sub').textContent = liveUbuntu ? 'read-only file access' : 'No feed connected';
+    $('department-metric-foot').textContent = liveUbuntu ? 'Configured local0–local3 logs' : 'No live department feeds';
+    const connectedDepartments = liveUbuntu ? data.departments.filter(item => item.status === 'Log readable').length : 0;
     $('department-online-count').textContent = connectedDepartments;
     document.querySelectorAll('.status-track i').forEach((bar, index) => bar.classList.toggle('offline', index >= connectedDepartments));
-    $('host-inline').textContent = host.environment;
     $('host-name').textContent = host.hostname;
     $('host-os').textContent = host.os;
-    $('mode-notice').innerHTML = data.mode === 'ubuntu-live'
-      ? `<strong>Ubuntu live mode.</strong> Host metrics, service states, archive mount, and readable department log tails come from ${safeText(host.hostname)}. Incident-register records are stored in this VM's local SQLite database; the separate log panel reads the VM's routed files.`
-      : `<strong>Kali WSL rehearsal mode.</strong> Host metrics come from ${safeText(host.environment)}. Department sources are simulated and incident examples are local rehearsal records; the university Ubuntu VM is not connected.`;
-    $('live-systems').hidden = !data.runtime;
+    $('mode-notice').innerHTML = liveUbuntu
+      ? `<strong>Ubuntu live mode.</strong> Resource readings and service, mount, Cron, and log status are read from ${safeText(host.hostname)}. The incident register starts empty and contains only records entered by an operator.`
+      : `<strong>${safeText(host.environment)} local host mode.</strong> Resource readings below come from this Linux environment. No city log source is connected here. The incident register starts empty and contains only records you enter.`;
+    $('incident-storage-note').textContent = liveUbuntu ? 'This saves a record on the Ubuntu VM.' : `This saves a record on this ${host.environment} host.`;
+    $('department-feed-summary').textContent = liveUbuntu
+      ? `${connectedDepartments} of 4 configured department log files readable.`
+      : `No department log feeds are connected in ${host.environment}.`;
+    hasLiveRuntime = Boolean(data.runtime);
+    showPage(currentView, {updateHistory:false});
     if (!data.runtime) {
       $('archive-total').textContent = '—'; $('archive-card-note').textContent = 'Capacity appears here in Ubuntu live mode';
       $('archive-used').textContent = '—'; $('archive-free').textContent = '—'; $('archive-progress').style.width = '0%';
     }
     document.querySelectorAll('#automation .schedule-state').forEach(node => { if (data.runtime) node.textContent = data.runtime.cron_configured ? 'INSTALLED' : 'NOT INSTALLED'; });
-    $('health-value').textContent = host.health_score ?? '—';
+    if (data.runtime) {
+      $('cron-summary').textContent = data.runtime.cron_configured
+        ? 'The project Cron file is present on this Ubuntu host; check Cron service status above.'
+        : 'The project Cron file is not installed on this Ubuntu host.';
+    }
     $('incident-count').textContent = summary.open_incidents;
     $('active-summary').textContent = `${summary.active_incidents} open or acknowledged`;
     $('event-total').textContent = summary.total_events;
+    $('cpu-kpi').textContent = host.cpu_used_percent == null ? '—' : `${host.cpu_used_percent}%`;
     $('cpu-value').textContent = host.cpu_used_percent == null ? '—' : `${host.cpu_used_percent}%`;
     $('cpu-bar').style.width = `${Math.min(100,host.cpu_used_percent||0)}%`;
     $('cpu-sub').textContent = 'Read-only sample from /proc/stat';
@@ -98,11 +174,14 @@ async function refreshDashboard() {
       const label = row.querySelector('.department-stat small');
       if (label) label.textContent = 'Active cases';
       const status = row.querySelector('.department-status');
-      if (status) status.innerHTML = `<i></i> ${safeText(department.status)}`;
+      if (status) {
+        status.classList.toggle('source-readable', department.status === 'Log readable');
+        status.innerHTML = `<i></i> ${safeText(department.status)}`;
+      }
     });
     if (data.runtime) renderRuntime(data.runtime);
     await loadEvents();
-  } catch (error) { showToast('Could not load local app data. Is dashboard/run.sh running?'); }
+  } catch (error) { showToast(`Could not load dashboard data: ${error.message}`); }
 }
 function renderRuntime(runtime) {
   const services = Object.entries(runtime.services);
@@ -120,14 +199,15 @@ function renderRuntime(runtime) {
   $('log-read-note').textContent = runtime.readable_logs.length ? `Read-only access · ${runtime.readable_logs.length} department log file(s)` : 'No department log files are readable yet. Apply the dashboard access setup on the Ubuntu VM.';
   $('live-log-list').innerHTML = runtime.logs.length ? runtime.logs.map(log => `<article class="live-log-entry"><span class="dept-tag ${DEPT_CLASS[log.department]}"><i></i>${safeText(log.department)}</span><span class="severity ${log.level.toLowerCase()}">${safeText(log.level.toUpperCase())}</span><p>${safeText(log.message)}</p><small>${safeText(log.time)}</small></article>`).join('') : '<div class="live-log-empty">No routed department messages yet. Send the demo messages from the Ubuntu runbook.</div>';
 }
-async function updateStatus(id, status) {
+async function updateStatus(id, status, button) {
+  if (button) { button.disabled = true; button.setAttribute('aria-busy', 'true'); }
   try {
     const response = await fetch(`/api/events/${id}`, {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})});
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'Could not update incident');
+    await readApiResponse(response);
     showToast(`Incident ${id} marked ${status.toLowerCase()}.`);
     currentPage = 1; await refreshDashboard();
-  } catch (error) { showToast(error.message); }
+  } catch (error) { showToast(`Could not update incident: ${error.message}`); }
+  finally { if (button?.isConnected) { button.disabled = false; button.removeAttribute('aria-busy'); } }
 }
 async function saveIncident(event) {
   event.preventDefault();
@@ -136,14 +216,17 @@ async function saveIncident(event) {
   const payload = Object.fromEntries(form.entries());
   try {
     const response = await fetch('/api/events',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'Could not save incident');
+    await readApiResponse(response);
     $('incident-dialog').close(); event.currentTarget.reset();
-    showToast('Incident saved to the local SQLite register.');
+    showToast('Incident saved to this host’s SQLite register.');
     currentPage = 1; await refreshDashboard();
   } catch (err) { error.textContent = err.message; }
 }
 document.addEventListener('DOMContentLoaded', () => {
+  let savedTheme = 'light';
+  try { savedTheme = localStorage.getItem('smartcity-theme') || 'light'; } catch (_) { /* Use the light default when storage is unavailable. */ }
+  applyTheme(savedTheme);
+  $('theme-toggle').addEventListener('click', () => applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
   refreshDashboard();
   setInterval(refreshDashboard, 30000);
   $('refresh-button').addEventListener('click', refreshDashboard);
@@ -165,14 +248,18 @@ document.addEventListener('DOMContentLoaded', () => {
     window.location.assign(`/api/export.csv?${params}`);
   });
   $('event-rows').addEventListener('click', event => {
-    const button = event.target.closest('[data-status]');
-    if (button) updateStatus(button.dataset.id, button.dataset.status);
+    const button = event.target.closest('button[data-status]');
+    if (button && !button.disabled) updateStatus(button.dataset.id, button.dataset.status, button);
   });
-  document.querySelector('.notice-close').addEventListener('click', () => document.querySelector('.notice').remove());
-  document.querySelectorAll('.nav-item, [data-nav]').forEach(link => link.addEventListener('click', event => {
-    const targetId = link.dataset.nav || link.getAttribute('href')?.slice(1);
-    const target = document.getElementById(targetId);
-    if (!target) { event.preventDefault(); showToast('This section is represented in the local demo view.'); return; }
-    document.querySelectorAll('.nav-item').forEach(item => item.classList.toggle('active',item.getAttribute('href') === `#${targetId}`));
+  document.querySelector('.notice-close').addEventListener('click', () => {
+    noticeDismissed = true;
+    $('notice').hidden = true;
+  });
+  showPage(viewFromHash(location.hash), {updateHistory:false});
+  document.querySelectorAll('[data-page]').forEach(link => link.addEventListener('click', event => {
+    event.preventDefault();
+    showPage(link.dataset.page);
+    window.scrollTo({top:0,behavior:'smooth'});
   }));
+  window.addEventListener('popstate', () => showPage(viewFromHash(location.hash), {updateHistory:false}));
 });

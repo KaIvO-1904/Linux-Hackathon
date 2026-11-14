@@ -15,5 +15,5 @@ export DEBIAN_FRONTEND=noninteractive
 log "Refreshing Ubuntu package metadata."
 apt-get update
 log "Installing project dependencies."
-apt-get install -y rsyslog cron ufw tar gzip rsync procps util-linux coreutils lvm2 e2fsprogs python3 acl
+apt-get install -y rsyslog cron logrotate ufw tar gzip rsync procps util-linux coreutils lvm2 e2fsprogs python3 acl
 log "Dependencies installed. Enable/configure services in the runbook when appropriate."

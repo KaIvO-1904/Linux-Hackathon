@@ -154,10 +154,15 @@ When the dashboard is installed, the backup script also creates a consistent SQL
 ```bash
 sudo /opt/smartcity/scripts/install_cron.sh
 sudo cat /etc/cron.d/smartcity
+sudo cat /etc/logrotate.d/smartcity
 sudo systemctl status --no-pager cron
 ```
 
 The schedule runs the health report daily at 06:00, archives logs older than seven days at 01:00, removes archives older than thirty days at 01:20, and creates a backup at 02:00. Use `grep smartcity /var/log/syslog` or inspect `/srv/smartcity/reports` and `/srv/smartcity/backups` to verify actual runs.
+
+The backup script takes a non-blocking `flock` lock in `/srv/smartcity/backups/.backup.lock`. If Cron fires while a manual or earlier backup is still running, the later invocation logs a skip and exits instead of waiting or starting a second copy. The kernel releases the lock when the process exits, including after a crash, so the lock file itself is safe to leave in place. A later, separate invocation after the first completes still creates its own timestamped backup; the lock prevents overlap, not intentional historical duplicates. The script also uses a restrictive umask and publishes only after the archive passes its integrity check, avoiding partially written or broadly readable backups. If a timestamped destination already exists, it refuses to overwrite it.
+
+The same collision protection is enabled for log archives. Log rotation keeps fourteen compressed daily Cron logs. Restore refuses a symbolic-link target. The dashboard API caps incident storage at 10,000 records and CSV exports at 5,000 rows; a capped export includes `X-Export-Truncated: true` in its response headers.
 
 ## 10. Firewall (only if required)
 
