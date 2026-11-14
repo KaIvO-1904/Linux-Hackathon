@@ -1,0 +1,33 @@
+[Unit]
+Description=Smart City Command Centre read-only dashboard
+After=network.target rsyslog.service
+Wants=rsyslog.service
+
+[Service]
+Type=simple
+User=smartcity-dashboard
+Group=smartcity-dashboard
+WorkingDirectory=/opt/smartcity/dashboard
+Environment=SMARTCITY_MODE=ubuntu
+Environment=SMARTCITY_DB=/var/lib/smartcity-dashboard/smartcity.sqlite3
+Environment=SMARTCITY_PORT=8765
+StateDirectory=smartcity-dashboard
+StateDirectoryMode=0750
+UMask=0077
+ExecStart=/usr/bin/python3 /opt/smartcity/dashboard/app.py
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

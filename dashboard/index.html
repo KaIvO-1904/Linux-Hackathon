@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4f6f8">
+  <title>City Operations — Smart City Command Centre</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Main navigation">
+      <a class="brand" href="#overview" aria-label="City Operations home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20h18M5 20V9l7-5 7 5v11M9 20v-6h6v6M8 10h.01M16 10h.01"/></svg></span>
+        <span><strong>civic<span>OS</span></strong><small>OPERATIONS CENTER</small></span>
+      </a>
+      <div class="nav-label">WORKSPACE</div>
+      <nav class="nav-list">
+        <a class="nav-item active" href="#overview"><span class="nav-icon">▦</span> Overview <span class="nav-active"></span></a>
+        <a class="nav-item" href="#departments"><span class="nav-icon">⌘</span> Departments <span class="nav-count">4</span></a>
+        <a class="nav-item" href="#activity"><span class="nav-icon">≋</span> Event stream</a>
+        <a class="nav-item" href="#infrastructure"><span class="nav-icon">◫</span> Infrastructure</a>
+        <a class="nav-item" href="#automation"><span class="nav-icon">⟳</span> Automation</a>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="environment-card"><span class="env-dot"></span><div><b id="workspace-mode">Local rehearsal</b><small id="env-name">Detecting Linux…</small></div><span class="read-only-tag">READ ONLY</span></div>
+        <div class="profile"><div class="avatar">SC</div><div class="profile-copy"><strong>City Operator</strong><small>Demo workspace</small></div><button class="more-button" aria-label="More profile options">···</button></div>
+      </div>
+    </aside>
+
+    <main class="main-content" id="overview">
+      <header class="topbar">
+        <div class="breadcrumbs"><span>Workspace</span><span class="crumb-slash">/</span><strong>Overview</strong></div>
+        <div class="top-actions"><span class="live-indicator" id="mode-badge"><i></i> SIMULATION</span><span class="top-date" id="date-now">—</span><button class="icon-button" id="refresh-button" aria-label="Refresh dashboard" title="Refresh dashboard"><svg viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5M5.6 9A7 7 0 0 1 18 6l2 6M4 12l2 6a7 7 0 0 0 12.4-3"/></svg></button></div>
+      </header>
+
+      <section class="page-heading">
+        <div><div class="eyebrow"><span class="eyebrow-line"></span> CITY SYSTEMS · COMMAND VIEW</div><h1>Good morning, Operator<span class="heading-period">.</span></h1><p>Here’s what’s happening across your city today.</p></div>
+        <button class="primary-button" id="new-event-button"><span>＋</span> Record incident</button>
+      </section>
+
+      <div class="notice"><span class="notice-icon">i</span><p id="mode-notice"><strong>Rehearsal mode.</strong> City department sources are simulated; machine metrics come from the local Linux host. In Ubuntu live mode, the dashboard reads allowlisted services, the archive mount, and department log files without changing them.</p><button class="notice-close" aria-label="Dismiss notice">×</button></div>
+
+      <section class="metric-grid" aria-label="City overview metrics">
+        <article class="metric-card"><div class="metric-top"><span class="metric-label">LOCAL HOST HEALTH</span><span class="metric-icon mint">⌁</span></div><div class="metric-main"><strong><span id="health-value">—</span><span class="unit">%</span></strong><span class="metric-trend positive">● <small>resource estimate</small></span></div><div class="metric-foot"><span class="metric-foot-dot mint-dot"></span><span>Calculated from RAM and disk</span></div></article>
+        <article class="metric-card"><div class="metric-top"><span class="metric-label">OPEN INCIDENTS</span><span class="metric-icon amber">!</span></div><div class="metric-main"><strong id="incident-count">—</strong><span class="metric-trend negative">● <small>local records</small></span></div><div class="metric-foot"><span class="metric-foot-dot amber-dot"></span><span id="active-summary">Persistent SQLite store</span></div></article>
+        <article class="metric-card"><div class="metric-top"><span class="metric-label" id="department-metric-label">DEPARTMENTS IN DEMO</span><span class="metric-icon blue">⌘</span></div><div class="metric-main"><strong><span id="department-online-count">4</span><span class="unit">/4</span></strong><span class="metric-trend positive">● <small id="department-metric-sub">simulated sources</small></span></div><div class="metric-foot"><span class="status-track"><i></i><i></i><i></i><i></i></span><span id="department-metric-foot">local0 through local3</span></div></article>
+        <article class="metric-card"><div class="metric-top"><span class="metric-label">EVENTS RECORDED</span><span class="metric-icon violet">≋</span></div><div class="metric-main"><strong id="event-total">—</strong><span class="metric-trend positive">● <small>saved locally</small></span></div><div class="metric-foot"><span class="metric-foot-dot violet-dot"></span><span>Incident history</span></div></article>
+      </section>
+
+      <section class="content-grid">
+        <div class="panel departments-panel" id="departments">
+          <div class="panel-heading"><div><h2>Department overview</h2><p>Operational status by city service</p></div><button class="text-button" data-nav="departments">View all <span>→</span></button></div>
+          <div class="department-list">
+            <article class="department-row" data-department="Traffic"><div class="department-symbol traffic">↗</div><div class="department-name"><strong>Traffic Management</strong><small>Simulated department</small></div><span class="department-status"><i></i> Demo source</span><div class="department-stat"><strong>—</strong><small>Open cases</small></div><span class="row-arrow">›</span></article>
+            <article class="department-row" data-department="Public Safety"><div class="department-symbol safety">＋</div><div class="department-name"><strong>Public Safety</strong><small>Simulated department</small></div><span class="department-status"><i></i> Demo source</span><div class="department-stat"><strong>—</strong><small>Open cases</small></div><span class="row-arrow">›</span></article>
+            <article class="department-row" data-department="Water"><div class="department-symbol water">⌁</div><div class="department-name"><strong>Water Services</strong><small>Simulated department</small></div><span class="department-status"><i></i> Demo source</span><div class="department-stat"><strong>—</strong><small>Open cases</small></div><span class="row-arrow">›</span></article>
+            <article class="department-row" data-department="Utilities"><div class="department-symbol utilities">ϟ</div><div class="department-name"><strong>Utilities &amp; Energy</strong><small>Simulated department</small></div><span class="department-status"><i></i> Demo source</span><div class="department-stat"><strong>—</strong><small>Open cases</small></div><span class="row-arrow">›</span></article>
+          </div>
+          <div class="department-foot"><span><i class="foot-dot"></i> 4 of 4 departments connected</span><span>Last sync <strong>just now</strong></span></div>
+        </div>
+
+        <aside class="panel health-panel" id="infrastructure">
+          <div class="panel-heading"><div><h2>Host resources</h2><p>Read-only · this dashboard host</p></div><span class="refresh-mark">↻</span></div>
+          <div class="host-chip"><span class="host-glyph">⌘</span><div><strong id="host-name">Linux host</strong><small id="host-os">Reading local system…</small></div><span class="host-state">LOCAL</span></div>
+          <div class="resource-row"><div class="resource-copy"><span>CPU · 120 ms sample</span><strong id="cpu-value">—</strong></div><div class="progress-track"><span id="cpu-bar" class="progress-fill fill-violet" style="width:0%"></span></div><small id="cpu-sub">Recent utilization sample</small></div>
+          <div class="resource-row"><div class="resource-copy"><span>Memory</span><strong id="memory-value">—</strong></div><div class="progress-track"><span id="memory-bar" class="progress-fill fill-blue" style="width:0%"></span></div><small id="memory-sub">Waiting for local reading</small></div>
+          <div class="resource-row"><div class="resource-copy"><span>Root filesystem</span><strong id="disk-value">—</strong></div><div class="progress-track"><span id="disk-bar" class="progress-fill fill-mint" style="width:0%"></span></div><small id="disk-sub">Read-only disk usage</small></div>
+          <div class="host-meta"><div><span>Load average</span><strong id="load-value">—</strong></div><div><span>Uptime</span><strong id="uptime-value">—</strong></div></div>
+          <div class="host-foot"><span class="read-only-lock">▣</span> No system changes are made by this page</div>
+        </aside>
+      </section>
+
+      <section class="panel activity-panel" id="activity">
+          <div class="panel-heading activity-heading"><div><h2>Incident register</h2><p>Persistent local records · filter, update status, or export CSV</p></div><div class="activity-controls"><label class="search-box"><span>⌕</span><input id="event-search" type="search" placeholder="Search events" aria-label="Search events"></label><select class="filter-select" id="department-filter" aria-label="Filter by department"><option value="">All departments</option><option>Traffic</option><option>Public Safety</option><option>Water</option><option>Utilities</option></select><select class="filter-select" id="severity-filter" aria-label="Filter by severity"><option value="">All levels</option><option>Critical</option><option>Warning</option><option>Info</option></select><select class="filter-select" id="status-filter" aria-label="Filter by status"><option value="">All statuses</option><option>Open</option><option>Acknowledged</option><option>Resolved</option></select><button class="export-button" id="export-button" type="button">Export CSV</button></div></div>
+        <div class="table-wrap"><table><thead><tr><th>TIME</th><th>DEPARTMENT</th><th>INCIDENT</th><th>SEVERITY</th><th>STATUS</th><th>ACTION</th></tr></thead><tbody id="event-rows"></tbody></table></div>
+        <div class="table-footer"><span id="event-summary">Loading incident register…</span><div class="pagination"><span class="pagination-label">Updated <strong id="last-updated">—</strong></span><button id="previous-page" type="button" aria-label="Previous results page">‹</button><span id="page-label">1 / 1</span><button id="next-page" type="button" aria-label="Next results page">›</button></div></div>
+      </section>
+
+      <section class="panel live-panel" id="live-systems" hidden>
+        <div class="panel-heading"><div><h2>Ubuntu VM live status</h2><p>Read-only inspection of local services, storage, and routed logs</p></div><span class="live-indicator"><i></i> LIVE READ ONLY</span></div>
+        <div class="live-grid"><div><h3>System services</h3><div id="service-grid" class="service-grid"></div><div class="vm-storage"><span>LVM archive mount</span><strong id="archive-state">Checking mount…</strong><small id="archive-capacity">—</small></div><div class="vm-storage"><span>Scheduled job file</span><strong id="cron-state">Checking configuration…</strong></div></div><div><h3>Latest department log entries</h3><p class="live-read-note" id="log-read-note">Reading approved department files…</p><div class="live-log-list" id="live-log-list"></div></div></div>
+      </section>
+
+      <section class="bottom-grid" id="automation">
+        <article class="panel automation-panel"><div class="panel-heading"><div><h2>Scheduled operations</h2><p>Planned jobs in the Ubuntu VM bundle</p></div><span class="schedule-tag">CRON</span></div><div class="schedule-list"><div><span class="schedule-time">01:00</span><span class="schedule-name"><b>Log archive</b><small>Daily · archives logs older than 7 days</small></span><span class="schedule-state planned">PLANNED</span></div><div><span class="schedule-time">02:00</span><span class="schedule-name"><b>Project backup</b><small>Daily · compressed local backup</small></span><span class="schedule-state planned">PLANNED</span></div><div><span class="schedule-time">06:00</span><span class="schedule-name"><b>Health report</b><small>Daily · host resource snapshot</small></span><span class="schedule-state planned">PLANNED</span></div></div><div class="automation-note"><span>i</span> Cron jobs are configured on Ubuntu only after the runbook is applied.</div></article>
+        <article class="panel storage-panel"><div class="panel-heading"><div><h2>Archive storage</h2><p>LVM archive volume · Ubuntu VM</p></div><span class="storage-icon">▤</span></div><div class="storage-number"><strong id="archive-total">—</strong><span id="archive-card-note">Capacity available in Ubuntu live mode</span></div><div class="storage-progress"><span id="archive-progress"></span></div><div class="storage-legend"><span><i class="storage-used"></i> In use <b id="archive-used">—</b></span><span><i class="storage-free"></i> Free <b id="archive-free">—</b></span></div><div class="storage-note" id="archive-help">Attach a separate empty virtual disk before demonstrating LVM. D: free space alone is not an attached VM disk.</div></article>
+      </section>
+      <footer class="page-footer"><span>civicOS <b>·</b> SMART CITY COMMAND CENTRE</span><span>Dashboard rehearsal build <b>1.0</b></span></footer>
+    </main>
+  </div>
+  <dialog class="incident-dialog" id="incident-dialog" aria-labelledby="dialog-title">
+    <form id="incident-form">
+      <div class="dialog-heading"><div><span class="dialog-kicker">CITY OPERATIONS</span><h2 id="dialog-title">Record an incident</h2><p>This saves a local rehearsal record only.</p></div><button class="dialog-close" type="button" aria-label="Close dialog">×</button></div>
+      <label>Department<select name="department" required><option>Traffic</option><option>Public Safety</option><option>Water</option><option>Utilities</option></select></label>
+      <label>Severity<select name="level" required><option>Warning</option><option>Critical</option><option>Info</option></select></label>
+      <label>Incident title<input name="title" maxlength="140" required placeholder="Briefly describe what happened"></label>
+      <label>Location or details<textarea name="detail" maxlength="240" rows="3" placeholder="Optional · up to 240 characters"></textarea></label>
+      <p class="form-error" id="form-error" role="alert"></p>
+      <div class="dialog-actions"><button class="cancel-button" type="button">Cancel</button><button class="primary-button" type="submit">Save incident</button></div>
+    </form>
+  </dialog>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

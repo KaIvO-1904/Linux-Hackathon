@@ -14,6 +14,8 @@
 
 Smart City Command Centre is a single Ubuntu Server administration project that demonstrates separation of four simulated municipal departments (traffic, safety, water, utilities). Local syslog facilities local0 through local3 route messages into department-specific files. Linux groups and setgid directories restrict department access. An optional LVM logical volume provides an archive mount. Bash scripts generate health reports, create and retain compressed archives, install Cron schedules, and back up and restore project data.
 
+The included dashboard has two run modes. Kali WSL mode is a local rehearsal UI with persistent SQLite incident records and WSL host metrics. Ubuntu live mode runs as a dedicated unprivileged systemd service, reads selected service states, archive capacity, and department log tails, and remains bound to loopback. A private SSH tunnel provides browser access from Kali without exposing the dashboard port. Present it as live only after the corresponding VM deployment and checks have actually succeeded.
+
 The default configuration deliberately simulates department sources locally. It does not enable a remote syslog listener or open network port 514. This keeps the demonstration scoped to one VM and avoids presenting local routing as remote log collection.
 
 ## 1. Problem statement

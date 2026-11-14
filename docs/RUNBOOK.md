@@ -11,7 +11,7 @@ sudo ./scripts/install_dependencies.sh
 sudo ./scripts/install_project.sh
 ```
 
-The first command uses Ubuntu's package manager to install rsyslog, Cron, UFW, LVM2, filesystem, and archive tools. The second copies files to `/opt/smartcity` and creates `/srv/smartcity` project folders. They do not configure logging, Cron, or the firewall yet.
+The first command uses Ubuntu's package manager to install rsyslog, Cron, UFW, LVM2, filesystem/archive tools, Python 3, and ACL support. The second copies files to `/opt/smartcity` and creates `/srv/smartcity` project folders. They do not configure logging, Cron, or the firewall yet.
 
 ## 2. Inspect storage and prepare the LVM archive filesystem
 
@@ -88,7 +88,26 @@ sudo /opt/smartcity/scripts/verify_logs.sh
 
 These are local simulated department messages. They demonstrate routing, but do not prove remote syslog reception from separate machines.
 
-## 6. Generate and archive reports
+## 6. Start the Ubuntu live dashboard
+
+This installs a loopback-only web dashboard service under a dedicated, unprivileged account. Its ACL grants read-only access to the four department log files. It reads service status, archive mount capacity, Cron configuration, and log tails; it does not change services or logs. It is not a remote syslog listener.
+
+```bash
+sudo /opt/smartcity/scripts/setup_dashboard_access.sh
+sudo /opt/smartcity/scripts/install_dashboard_service.sh
+sudo systemctl status --no-pager smartcity-dashboard
+curl -sS http://127.0.0.1:8765/api/dashboard | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["mode"], d["host"]["hostname"], d["runtime"]["services"])'
+```
+
+The dashboard listens on VM loopback only. From Kali WSL, open an SSH tunnel using your university VM account and the address approved by your instructor:
+
+```bash
+ssh -N -L 8766:127.0.0.1:8765 <username>@<ubuntu-vm-address>
+```
+
+Keep that terminal running, then browse to `http://localhost:8766` on Windows. Do not open port 8765 in UFW or bind the dashboard to the VM's network interface. Stop the service when not needed with `sudo systemctl disable --now smartcity-dashboard`.
+
+## 7. Generate and archive reports
 
 ```bash
 /opt/smartcity/scripts/health_report.sh
@@ -111,7 +130,7 @@ gzip -t /srv/smartcity/archives/smartcity-logs-<timestamp>.tar.gz
 
 Replace `<timestamp>` with the actual filename shown by `ls -l /srv/smartcity/archives`.
 
-## 7. Back up and restore
+## 8. Back up and restore
 
 ```bash
 sudo /opt/smartcity/scripts/backup_project.sh
@@ -128,7 +147,9 @@ sudo /opt/smartcity/scripts/restore_project.sh \
 
 The restore script refuses to extract into a non-empty directory. Inspect the result under `/tmp/smartcity-restore` and compare it with the source.
 
-## 8. Install Cron jobs
+When the dashboard is installed, the backup script also creates a consistent SQLite snapshot at `var/lib/smartcity-dashboard/smartcity.sqlite3` inside the archive. The restore procedure extracts this under the verification directory; inspect it there before restoring it to a running service.
+
+## 9. Install Cron jobs
 
 ```bash
 sudo /opt/smartcity/scripts/install_cron.sh
@@ -138,7 +159,7 @@ sudo systemctl status --no-pager cron
 
 The schedule runs the health report daily at 06:00, archives logs older than seven days at 01:00, removes archives older than thirty days at 01:20, and creates a backup at 02:00. Use `grep smartcity /var/log/syslog` or inspect `/srv/smartcity/reports` and `/srv/smartcity/backups` to verify actual runs.
 
-## 9. Firewall (only if required)
+## 10. Firewall (only if required)
 
 On the VM console, inspect the proposed policy first:
 

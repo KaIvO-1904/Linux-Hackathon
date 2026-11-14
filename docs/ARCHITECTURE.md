@@ -35,6 +35,13 @@ flowchart LR
     BK --> BA[/srv/smartcity/backups/]
     BA --> RS[restore_project.sh]
     RS --> RT[/separate empty restore target/]
+    LT --> UI[Unprivileged loopback dashboard]
+    LS --> UI
+    LW --> UI
+    LU --> UI
+    VM[Ubuntu host metrics and service state] --> UI
+    UI --> DB[(Local incident SQLite DB)]
+    CLIENT[Kali WSL browser] -. SSH tunnel .-> UI
 ```
 
 ## Trust boundaries and notes
@@ -45,6 +52,8 @@ flowchart LR
 - The archive mount uses a dedicated empty disk only when one is supplied and approved. Creating a PV/filesystem erases the selected device.
 - Cron jobs run as root in the provided schedule. The archive retains source logs; cleanup removes archive bundles older than 30 days.
 - Backups reside on the same host by default and are not off-host disaster recovery.
+- Ubuntu live dashboard mode runs as `smartcity-dashboard`, binds to loopback only, and reads fixed department log paths through read-only ACLs. Use SSH tunneling to view it from Kali; do not expose the dashboard port publicly.
+- Kali WSL demo mode stores rehearsal incidents in a local SQLite file and reports WSL host metrics. It does not connect to the university VM.
 
 ## Data paths
 
@@ -55,3 +64,4 @@ flowchart LR
 | LVM archive mount | `/srv/smartcity/archives/` |
 | Project backups | `/srv/smartcity/backups/` |
 | Health/Cron reports | `/srv/smartcity/reports/` |
+| Ubuntu dashboard database | `/var/lib/smartcity-dashboard/smartcity.sqlite3` |
